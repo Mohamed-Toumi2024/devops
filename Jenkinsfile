@@ -2,23 +2,20 @@ pipeline {
     agent any
     
     tools {
-        maven 'M2_HOME'  // Utilise 'M3' au lieu de 'M2_HOME'
-        jdk 'JAVA_HOME' // Utilise le nom JDK configuré dans Jenkins
+        maven 'M2_HOME'
+        jdk 'JAVA_HOME'
     }
     
     environment {
         APP_NAME = 'student-management'
         VERSION = '0.0.1-SNAPSHOT'
-        DB_URL = 'jdbc:mysql://localhost:3306/studentdb'
-        DB_USERNAME = 'root'
-        DB_PASSWORD = ''
     }
     
     stages {
         stage('Checkout Code') {
             steps {
                 checkout scm
-                echo "📦 Projet: ${APP_NAME}"
+                echo "📦 Projet: ${env.APP_NAME}"
             }
         }
         
@@ -34,15 +31,9 @@ pipeline {
         stage('Tests Unitaires') {
             steps {
                 script {
-                    echo "🧪 Exécution des tests avec MySQL..."
-                    sh """
-                        mvn test \
-                        -Dspring.datasource.url=${DB_URL} \
-                        -Dspring.datasource.username=${DB_USERNAME} \
-                        -Dspring.datasource.password=${DB_PASSWORD} \
-                        -Dserver.port=8089 \
-                        -Dserver.servlet.context-path=/student
-                    """
+                    echo "🧪 Exécution des tests..."
+                    // Utilisation directe des valeurs (pas de variables pour le mot de passe vide)
+                    sh 'mvn test -Dspring.datasource.url=jdbc:mysql://localhost:3306/studentdb -Dspring.datasource.username=root -Dspring.datasource.password= -Dserver.port=8089 -Dserver.servlet.context-path=/student'
                 }
             }
             post {
@@ -70,14 +61,8 @@ pipeline {
     
     post {
         always {
-            echo "🏁 Pipeline terminé - ${APP_NAME}"
+            echo "🏁 Pipeline terminé - ${env.APP_NAME}"
             cleanWs()
-        }
-        success {
-            echo "✅ SUCCÈS: Build ${APP_NAME} réussi!"
-        }
-        failure {
-            echo "❌ ÉCHEC: Build ${APP_NAME} a échoué"
         }
     }
 }
