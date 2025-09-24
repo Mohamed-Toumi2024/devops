@@ -2,8 +2,8 @@ pipeline {
     agent any
     
     tools {
-        maven 'M2_HOME'
-        jdk 'JAVA_HOME'
+        maven 'M3'
+        jdk 'jdk17'
     }
     
     environment {
@@ -19,27 +19,42 @@ pipeline {
             }
         }
         
-        stage('Build et Package') {
+        stage('Clean') {
             steps {
                 script {
-                    echo "🔨 Construction du package..."
-                    // Skip tests car MySQL n'est pas disponible dans Jenkins
-                    sh 'mvn clean package -DskipTests'
+                    echo "🧹 Nettoyage du projet..."
+                    sh 'mvn clean'
+                    echo "✅ Nettoyage terminé"
                 }
             }
         }
         
-        stage('Archive Artifact') {
+        stage('Compile') {
             steps {
                 script {
-                    echo "📦 Archivage du JAR..."
+                    echo "🔨 Compilation du code..."
+                    sh 'mvn compile'
+                    echo "✅ Compilation réussie"
+                }
+            }
+        }
+        
+        stage('Package') {
+            steps {
+                script {
+                    echo "📦 Création du JAR..."
+                    sh 'mvn package -DskipTests'
+                    echo "✅ Package créé"
+                }
+            }
+        }
+        
+        stage('Archive') {
+            steps {
+                script {
+                    echo "📦 Archivage..."
                     archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
-                    
-                    // Afficher les informations du fichier généré
-                    def files = findFiles(glob: 'target/*.jar')
-                    if (files.length > 0) {
-                        echo "✅ Fichier généré: ${files[0].name}"
-                    }
+                    echo "✅ Artifact archivé"
                 }
             }
         }
@@ -49,9 +64,6 @@ pipeline {
         always {
             echo "🏁 Pipeline terminé pour ${env.APP_NAME}"
             cleanWs()
-        }
-        success {
-            echo "✅ SUCCÈS: Build complété avec succès!"
         }
     }
 }
