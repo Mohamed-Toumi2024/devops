@@ -52,7 +52,7 @@ pipeline {
         stage('Archive') {
             steps {
                 script {
-                    echo "📦 Archivage..."
+                    echo "📦 Archivage d'artefact"
                     archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
                     echo "✅ Artifact archivé"
                 }
