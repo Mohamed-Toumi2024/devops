@@ -75,13 +75,14 @@ pipeline {
             steps {
                 script {
                     echo "🚀 Déploiement avec docker-compose..."
-                    sh "docker-compose down || true"
+                    // Stop containers proprement avant de relancer
+                    sh "docker-compose down -v || true"
                     sh "docker-compose up -d --build"
                 }
             }
         }
     }
-    
+
     post {
         always {
             echo "🏁 Pipeline terminé pour ${env.APP_NAME}"
