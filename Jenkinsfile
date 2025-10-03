@@ -9,6 +9,7 @@ pipeline {
     environment {
         APP_NAME = 'student-management'
         VERSION = '0.0.1-SNAPSHOT'
+        DOCKER_IMAGE = "toumi/${APP_NAME}:${VERSION}"   // remplace par ton Docker Hub user
     }
     
     stages {
@@ -19,22 +20,11 @@ pipeline {
             }
         }
         
-        stage('Clean') {
+        stage('Clean & Compile') {
             steps {
                 script {
-                    echo "🧹 Nettoyage du projet..."
-                    sh 'mvn clean'
-                    echo "✅ Nettoyage terminé"
-                }
-            }
-        }
-        
-        stage('Compile') {
-            steps {
-                script {
-                    echo "🔨 Compilation du code..."
-                    sh 'mvn compile'
-                    echo "✅ Compilation réussie"
+                    echo "🧹 Nettoyage et compilation du projet..."
+                    sh 'mvn clean compile'
                 }
             }
         }
@@ -44,7 +34,6 @@ pipeline {
                 script {
                     echo "📦 Création du JAR..."
                     sh 'mvn package -DskipTests'
-                    echo "✅ Package créé"
                 }
             }
         }
@@ -52,9 +41,42 @@ pipeline {
         stage('Archive') {
             steps {
                 script {
-                    echo "📦 Archivage d'artefact"
+                    echo "📦 Archivage du JAR"
                     archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
-                    echo "✅ Artifact archivé"
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    echo "🐳 Construction de l'image Docker ${DOCKER_IMAGE}..."
+                    sh "docker build -t ${DOCKER_IMAGE} ."
+                }
+            }
+        }
+        
+        stage('Push Docker Image') {
+            when {
+                expression { return env.BRANCH_NAME == 'main' } // push seulement sur la branche main
+            }
+            steps {
+                script {
+                    echo "📤 Push de l'image vers Docker Hub..."
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+                        sh "docker push ${DOCKER_IMAGE}"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy with Docker Compose') {
+            steps {
+                script {
+                    echo "🚀 Déploiement avec docker-compose..."
+                    sh "docker-compose down || true"
+                    sh "docker-compose up -d --build"
                 }
             }
         }
@@ -64,6 +86,12 @@ pipeline {
         always {
             echo "🏁 Pipeline terminé pour ${env.APP_NAME}"
             cleanWs()
+        }
+        failure {
+            echo "❌ Le pipeline a échoué !"
+        }
+        success {
+            echo "✅ Déploiement réussi sur Docker !"
         }
     }
 }
