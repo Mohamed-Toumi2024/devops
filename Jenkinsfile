@@ -1,17 +1,17 @@
 pipeline {
     agent any
-    
+
     tools {
         maven 'M2_HOME'
         jdk 'JAVA_HOME'
     }
-    
+
     environment {
         APP_NAME = 'student-management'
         VERSION = '0.0.1-SNAPSHOT'
         DOCKER_IMAGE = "toumi/${APP_NAME}:${VERSION}"   // remplace par ton Docker Hub user
     }
-    
+
     stages {
         stage('Checkout Code') {
             steps {
@@ -19,7 +19,7 @@ pipeline {
                 echo "📦 Projet: ${env.APP_NAME}"
             }
         }
-        
+
         stage('Clean & Compile') {
             steps {
                 script {
@@ -28,7 +28,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Package') {
             steps {
                 script {
@@ -37,7 +37,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Archive') {
             steps {
                 script {
@@ -55,16 +55,13 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Push Docker Image') {
-            when {
-                expression { return env.BRANCH_NAME == 'main' } // push seulement sur la branche main
-            }
             steps {
                 script {
                     echo "📤 Push de l'image vers Docker Hub..."
                     withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+                        sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin"
                         sh "docker push ${DOCKER_IMAGE}"
                     }
                 }
