@@ -9,7 +9,7 @@ pipeline {
     environment {
         APP_NAME = 'student-management'
         VERSION = '0.0.1-SNAPSHOT'
-        DOCKER_IMAGE = "toumi/${APP_NAME}:${VERSION}"   // remplace par ton Docker Hub user
+        DOCKER_IMAGE = "toumimohameddhia2025/${APP_NAME}:${VERSION}"   // remplace par ton Docker Hub user
     }
 
     stages {
