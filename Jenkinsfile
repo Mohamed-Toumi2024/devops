@@ -9,7 +9,8 @@ pipeline {
     environment {
         APP_NAME = 'student-management'
         VERSION = '0.0.1-SNAPSHOT'
-        DOCKER_IMAGE = "toumimohameddhia2025/${APP_NAME}:${VERSION}"   // remplace par ton Docker Hub user
+        DOCKER_IMAGE = "toumimohameddhia2025/${APP_NAME}:${VERSION}"
+        SONARQUBE = 'SonarQube' // Nom du serveur SonarQube configuré dans Jenkins
     }
 
     stages {
@@ -25,6 +26,43 @@ pipeline {
                 script {
                     echo "🧹 Nettoyage et compilation du projet..."
                     sh 'mvn clean compile'
+                }
+            }
+        }
+
+        stage('Start DB for Tests') {
+            steps {
+                script {
+                    echo "🐳 Démarrage de MySQL via Docker Compose..."
+                    sh "docker-compose up -d db"
+                    sh "echo '⏳ Attente 10s pour que MySQL soit prêt'"
+                    sh "sleep 10"
+                }
+            }
+        }
+
+        stage('Run Tests & Jacoco') {
+            steps {
+                script {
+                    echo "🧪 Exécution des tests et génération du rapport Jacoco..."
+                    sh 'mvn test jacoco:report'
+                }
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    echo "🔍 Analyse SonarQube..."
+                    withSonarQubeEnv("${SONARQUBE}") {
+                        sh "mvn sonar:sonar \
+                            -Dsonar.projectKey=${APP_NAME} \
+                            -Dsonar.host.url=${env.SONAR_HOST_URL} \
+                            -Dsonar.login=${env.SONAR_AUTH_TOKEN} \
+                            -Dsonar.java.binaries=target/classes \
+                            -Dsonar.junit.reportPaths=target/surefire-reports \
+                            -Dsonar.jacoco.reportPaths=target/jacoco.exec"
+                    }
                 }
             }
         }
@@ -72,12 +110,12 @@ pipeline {
             steps {
                 script {
                     echo "🚀 Déploiement avec docker-compose..."
-                    // Stop containers proprement avant de relancer
                     sh "docker-compose down -v || true"
                     sh "docker-compose up -d --build"
                 }
             }
         }
+
     }
 
     post {
