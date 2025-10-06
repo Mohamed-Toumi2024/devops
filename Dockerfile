@@ -14,7 +14,7 @@ USER app
 # 5️⃣ Exposer le port utilisé par ton application Spring Boot
 EXPOSE 8089
 
-# 6️⃣ Option pour passer des options JVM
+# 6️⃣ Option pour passer des options JVM java runtime
 ENV JAVA_OPTS=""
 
 # 7️⃣ Lancer l’application
