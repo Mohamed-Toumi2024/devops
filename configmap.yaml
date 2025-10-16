@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: student-app-config
+data:
+  APP_NAME: "Student Management System"
+  APP_ENV: "dev"
