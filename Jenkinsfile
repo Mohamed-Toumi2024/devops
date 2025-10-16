@@ -10,76 +10,55 @@ pipeline {
         APP_NAME = 'student-management'
         VERSION = '0.0.1-SNAPSHOT'
         DOCKER_IMAGE = "toumimohameddhia2025/${APP_NAME}:${VERSION}"
-        SONAR_CONTAINER = 'sonarqube'
-        SONAR_PORT = '9000'
-        SONAR_URL = "http://localhost:${SONAR_PORT}"
+        SONARQUBE_CONTAINER = 'sonarqube'
+        SONARQUBE_PORT = '9000'
     }
 
     stages {
-
+        // ────────────────────────────────
         stage('Checkout Code') {
             steps {
+                echo "📦 Clonage du code source..."
                 checkout scm
-                echo "📦 Projet: ${env.APP_NAME}"
             }
         }
 
-        stage('Clean & Compile') {
+        // ────────────────────────────────
+        stage('Start SonarQube') {
             steps {
-                echo "🧹 Nettoyage et compilation du projet..."
-                sh 'mvn clean compile'
+                script {
+                    echo "🐳 Démarrage de SonarQube (localhost:9000)..."
+                    sh '''
+                        docker rm -f sonarqube || true
+                        docker run -d --name sonarqube \
+                            -p 9000:9000 \
+                            sonarqube:lts-community
+                        echo "⏳ Attente de 30s pour que SonarQube démarre..."
+                        sleep 30
+                    '''
+                }
             }
         }
 
-        stage('Start SonarQube in Docker') {
+        // ────────────────────────────────
+        stage('Build & Test') {
             steps {
-                echo "🐳 Démarrage de SonarQube via Docker..."
+                echo "🧹 Compilation et exécution des tests avec JaCoCo..."
                 sh '''
-                    if [ ! "$(docker ps -q -f name=$SONAR_CONTAINER)" ]; then
-                        if [ "$(docker ps -aq -f status=exited -f name=$SONAR_CONTAINER)" ]; then
-                            docker start $SONAR_CONTAINER
-                        else
-                            docker run -d --name $SONAR_CONTAINER -p $SONAR_PORT:9000 sonarqube:lts-community
-                        fi
-                    fi
-
-                    echo "⏳ Attente du démarrage complet de SonarQube (environ 1 min)..."
-                    for i in {1..60}; do
-                        if curl -s $SONAR_URL/api/system/status | grep -q '"status":"UP"'; then
-                            echo "✅ SonarQube est prêt."
-                            break
-                        fi
-                        echo "⏳ SonarQube pas encore prêt... ($i/60)"
-                        sleep 2
-                    done
+                    mvn clean compile test jacoco:report
                 '''
             }
         }
 
-        stage('Start DB for Tests') {
-            steps {
-                echo "🐳 Démarrage de MySQL via Docker Compose..."
-                sh "docker-compose up -d db"
-                echo "⏳ Attente 15s pour que MySQL soit prêt"
-                sh "sleep 15"
-            }
-        }
-
-        stage('Run Tests & Jacoco') {
-            steps {
-                echo "🧪 Exécution des tests unitaires et génération du rapport Jacoco..."
-                sh 'mvn test jacoco:report'
-            }
-        }
-
+        // ────────────────────────────────
         stage('SonarQube Analysis') {
             steps {
-                echo "🔍 Analyse SonarQube..."
+                echo "🔍 Analyse du code avec SonarQube..."
                 withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_AUTH_TOKEN')]) {
                     sh """
                         mvn sonar:sonar \
                             -Dsonar.projectKey=${APP_NAME} \
-                            -Dsonar.host.url=${SONAR_URL} \
+                            -Dsonar.host.url=http://localhost:${SONARQUBE_PORT} \
                             -Dsonar.login=${SONAR_AUTH_TOKEN} \
                             -Dsonar.java.binaries=target/classes \
                             -Dsonar.junit.reportPaths=target/surefire-reports \
@@ -89,58 +68,51 @@ pipeline {
             }
         }
 
-        stage('Package') {
+        // ────────────────────────────────
+        stage('Build & Push Docker Image') {
             steps {
-                echo "📦 Création du JAR..."
-                sh 'mvn package'
-            }
-        }
-
-        stage('Archive') {
-            steps {
-                echo "📦 Archivage du JAR"
-                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                echo "🐳 Construction de l'image Docker ${DOCKER_IMAGE}..."
+                echo "🐳 Construction et push de l'image Docker..."
                 sh "docker build -t ${DOCKER_IMAGE} ."
-            }
-        }
-
-        stage('Push Docker Image') {
-            steps {
-                echo "📤 Push de l'image vers Docker Hub..."
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin"
-                    sh "docker push ${DOCKER_IMAGE}"
+                    sh """
+                        echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
+                        docker push ${DOCKER_IMAGE}
+                    """
                 }
             }
         }
 
-        stage('Deploy with Docker Compose') {
+        // ────────────────────────────────
+        stage('Deploy to Kubernetes') {
             steps {
-                echo "🚀 Déploiement avec docker-compose..."
-                sh "docker-compose down -v || true"
-                sh "docker-compose up -d --build"
+                echo "🚀 Déploiement sur Minikube (Kubernetes)..."
+                sh '''
+                    kubectl config use-context minikube
+                    echo "📦 Application des fichiers YAML..."
+                    kubectl apply -f secret.yaml
+                    kubectl apply -f mysql-deployment.yaml
+                    kubectl apply -f deployment.yaml
+                    kubectl apply -f service.yaml
+
+                    echo "⏳ Attente du déploiement..."
+                    kubectl rollout status deployment/student-management
+                '''
             }
         }
     }
 
+    // ────────────────────────────────
     post {
         always {
-            echo "🏁 Pipeline terminé pour ${env.APP_NAME}"
-            echo "🧹 Arrêt du conteneur SonarQube..."
-            sh "docker stop ${SONAR_CONTAINER} || true"
+            echo "🏁 Nettoyage..."
+            sh 'docker rm -f sonarqube || true'
             cleanWs()
         }
-        failure {
-            echo "❌ Le pipeline a échoué !"
-        }
         success {
-            echo "✅ Déploiement réussi sur Docker !"
+            echo "✅ Pipeline terminé avec succès et app déployée sur Kubernetes."
+        }
+        failure {
+            echo "❌ Le pipeline a échoué. Vérifie les logs Jenkins."
         }
     }
 }
