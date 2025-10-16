@@ -25,20 +25,29 @@ pipeline {
 
         // ────────────────────────────────
         stage('Start SonarQube') {
-            steps {
-                script {
-                    echo "🐳 Démarrage de SonarQube (localhost:9000)..."
-                    sh '''
-                        docker rm -f sonarqube || true
-                        docker run -d --name sonarqube \
-                            -p 9000:9000 \
-                            sonarqube:lts-community
-                        echo "⏳ Attente de 30s pour que SonarQube démarre..."
-                        sleep 30
-                    '''
-                }
-            }
+    steps {
+        script {
+            echo "🐳 Démarrage de SonarQube (localhost:9000)..."
+            sh '''
+                docker rm -f sonarqube || true
+                docker run -d --name sonarqube \
+                    -p 9000:9000 \
+                    sonarqube:lts-community
+
+                echo "⏳ Attente du démarrage de SonarQube..."
+                for i in {1..30}; do
+                    if curl -s http://localhost:9000/api/system/status | grep -q '"status":"UP"'; then
+                        echo "✅ SonarQube est prêt."
+                        break
+                    fi
+                    echo "⌛ Tentative $i/30 - en attente..."
+                    sleep 10
+                done
+            '''
         }
+    }
+}
+
 
         // ────────────────────────────────
         stage('Build & Test') {
