@@ -9,8 +9,10 @@ pipeline {
     environment {
         APP_NAME = 'student-management'
         VERSION = '0.0.1-SNAPSHOT'
-        DOCKER_IMAGE = "toumimohameddhia2025/${APP_NAME}:${VERSION}" // ton Docker Hub user
-        SONARQUBE = 'SonarQube' // Nom du serveur SonarQube configuré dans Jenkins
+        DOCKER_IMAGE = "toumimohameddhia2025/${APP_NAME}:${VERSION}"
+        SONAR_CONTAINER = 'sonarqube'
+        SONAR_PORT = '9000'
+        SONAR_URL = "http://localhost:${SONAR_PORT}"
     }
 
     stages {
@@ -26,6 +28,31 @@ pipeline {
             steps {
                 echo "🧹 Nettoyage et compilation du projet..."
                 sh 'mvn clean compile'
+            }
+        }
+
+        stage('Start SonarQube in Docker') {
+            steps {
+                echo "🐳 Démarrage de SonarQube via Docker..."
+                sh '''
+                    if [ ! "$(docker ps -q -f name=$SONAR_CONTAINER)" ]; then
+                        if [ "$(docker ps -aq -f status=exited -f name=$SONAR_CONTAINER)" ]; then
+                            docker start $SONAR_CONTAINER
+                        else
+                            docker run -d --name $SONAR_CONTAINER -p $SONAR_PORT:9000 sonarqube:lts-community
+                        fi
+                    fi
+
+                    echo "⏳ Attente du démarrage complet de SonarQube (environ 1 min)..."
+                    for i in {1..60}; do
+                        if curl -s $SONAR_URL/api/system/status | grep -q '"status":"UP"'; then
+                            echo "✅ SonarQube est prêt."
+                            break
+                        fi
+                        echo "⏳ SonarQube pas encore prêt... ($i/60)"
+                        sleep 2
+                    done
+                '''
             }
         }
 
@@ -48,18 +75,16 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 echo "🔍 Analyse SonarQube..."
-                withSonarQubeEnv("${SONARQUBE}") {
-                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_AUTH_TOKEN')]) {
-                        sh """
-                            mvn sonar:sonar \
-                                -Dsonar.projectKey=${APP_NAME} \
-                                -Dsonar.host.url=${env.SONAR_HOST_URL} \
-                                -Dsonar.login=${SONAR_AUTH_TOKEN} \
-                                -Dsonar.java.binaries=target/classes \
-                                -Dsonar.junit.reportPaths=target/surefire-reports \
-                                -Dsonar.jacoco.reportPaths=target/jacoco.exec
-                        """
-                    }
+                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_AUTH_TOKEN')]) {
+                    sh """
+                        mvn sonar:sonar \
+                            -Dsonar.projectKey=${APP_NAME} \
+                            -Dsonar.host.url=${SONAR_URL} \
+                            -Dsonar.login=${SONAR_AUTH_TOKEN} \
+                            -Dsonar.java.binaries=target/classes \
+                            -Dsonar.junit.reportPaths=target/surefire-reports \
+                            -Dsonar.jacoco.reportPaths=target/jacoco.exec
+                    """
                 }
             }
         }
@@ -107,6 +132,8 @@ pipeline {
     post {
         always {
             echo "🏁 Pipeline terminé pour ${env.APP_NAME}"
+            echo "🧹 Arrêt du conteneur SonarQube..."
+            sh "docker stop ${SONAR_CONTAINER} || true"
             cleanWs()
         }
         failure {
