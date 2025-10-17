@@ -10,7 +10,7 @@ pipeline {
         APP_NAME = 'student-management'
         VERSION = '0.0.1-SNAPSHOT'
         DOCKER_IMAGE = "toumimohameddhia2025/${APP_NAME}:${VERSION}"
-        K8S_NAMESPACE = 'devops'
+        K8S_NAMESPACE = 'student-management'
     }
 
     stages {
@@ -25,7 +25,7 @@ pipeline {
         stage('Deploy MySQL in Kubernetes') {
             steps {
                 echo "🐳 Déploiement de MySQL dans Kubernetes..."
-                sh "kubectl apply -f k8s/mysql-deployment.yaml -n ${K8S_NAMESPACE}"
+                sh "kubectl apply -f k8s/mysql-deployment.yaml -n ${K8S_NAMESPACE} --validate=false"
                 echo "⏳ Attente que MySQL soit prêt..."
                 sh "kubectl wait --for=condition=ready pod -l app=mysql -n ${K8S_NAMESPACE} --timeout=60s"
             }
@@ -58,8 +58,8 @@ pipeline {
         stage('Deploy Application in Kubernetes') {
             steps {
                 echo "🚀 Déploiement de l'application dans Kubernetes..."
-                sh "kubectl apply -f k8s/deployment.yaml -n ${K8S_NAMESPACE}"
-                sh "kubectl apply -f k8s/service.yaml -n ${K8S_NAMESPACE}"
+                sh "kubectl apply -f k8s/deployment.yaml -n ${K8S_NAMESPACE} --validate=false"
+                sh "kubectl apply -f k8s/service.yaml -n ${K8S_NAMESPACE} --validate=false"
             }
         }
     }
