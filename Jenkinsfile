@@ -11,6 +11,7 @@ pipeline {
         VERSION = '0.0.1-SNAPSHOT'
         DOCKER_IMAGE = "toumimohameddhia2025/${APP_NAME}:${VERSION}"
         K8S_NAMESPACE = 'student-management'
+        KUBECONFIG = '/var/lib/jenkins/.kube/config' // <-- Indique le kubeconfig de Jenkins
     }
 
     stages {
@@ -27,7 +28,7 @@ pipeline {
                 echo "🐳 Déploiement de MySQL dans Kubernetes..."
                 sh "kubectl apply -f k8s/mysql-deployment.yaml -n ${K8S_NAMESPACE} --validate=false"
                 echo "⏳ Attente que MySQL soit prêt..."
-                sh "kubectl wait --for=condition=ready pod -l app=mysql -n ${K8S_NAMESPACE} --timeout=60s"
+                sh "kubectl wait --for=condition=ready pod -l app=mysql -n ${K8S_NAMESPACE} --timeout=120s"
             }
         }
 
@@ -58,8 +59,12 @@ pipeline {
         stage('Deploy Application in Kubernetes') {
             steps {
                 echo "🚀 Déploiement de l'application dans Kubernetes..."
-                sh "kubectl apply -f k8s/deployment.yaml -n ${K8S_NAMESPACE} --validate=false"
-                sh "kubectl apply -f k8s/service.yaml -n ${K8S_NAMESPACE} --validate=false"
+                sh """
+                    export KUBECONFIG=${KUBECONFIG}
+                    kubectl apply -f k8s/deployment.yaml -n ${K8S_NAMESPACE} --validate=false
+                    kubectl apply -f k8s/service.yaml -n ${K8S_NAMESPACE} --validate=false
+                    kubectl wait --for=condition=available deployment/${APP_NAME} -n ${K8S_NAMESPACE} --timeout=180s
+                """
             }
         }
     }
