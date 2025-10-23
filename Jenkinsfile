@@ -27,15 +27,6 @@ pipeline {
             }
         }
 
-        stage('SonarQube Code Analysis') {
-            steps {
-                echo "🔍 Analyse du code avec SonarQube..."
-                withSonarQubeEnv("${SONARQUBE_SERVER}") {
-                    sh "mvn clean verify sonar:sonar -Dsonar.projectKey=${APP_NAME}"
-                }
-            }
-        }
-
         stage('Deploy MySQL in Kubernetes') {
             steps {
                 echo "🐳 Déploiement de MySQL dans Kubernetes..."
@@ -61,14 +52,21 @@ pipeline {
             }
         }
 
-        stage('Build & Test Maven') {
+        stage('Test & SonarQube Analysis') {
             steps {
-                echo "🧹 Compilation et tests Maven avec MySQL..."
-                sh """
-                    mvn clean test -Dspring.datasource.url=jdbc:mysql://${MYSQL_SERVICE_NAME}:3306/${MYSQL_DATABASE} \
-                        -Dspring.datasource.username=root \
-                        -Dspring.datasource.password=${MYSQL_ROOT_PASSWORD}
-                """
+                withSonarQubeEnv('SonarQube') {
+                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                        sh """
+                        mvn clean verify sonar:sonar \
+                          -Dspring.datasource.url=jdbc:mysql://${MYSQL_SERVICE_NAME}:3306/${MYSQL_DATABASE} \
+                          -Dspring.datasource.username=root \
+                          -Dspring.datasource.password=${MYSQL_ROOT_PASSWORD} \
+                          -Dsonar.projectKey=${APP_NAME} \
+                          -Dsonar.host.url=http://192.168.49.2:30900 \
+                          -Dsonar.login=$SONAR_TOKEN
+                        """
+                    }
+                }
             }
         }
 
