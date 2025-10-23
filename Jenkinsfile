@@ -11,10 +11,11 @@ pipeline {
         VERSION = '0.0.1-SNAPSHOT'
         DOCKER_IMAGE = "toumimohameddhia2025/${APP_NAME}:${VERSION}"
         K8S_NAMESPACE = 'student-management'
-        KUBECONFIG = '/var/lib/jenkins/.kube/config' // kubeconfig pour Jenkins
+        KUBECONFIG = '/var/lib/jenkins/.kube/config'
         MYSQL_ROOT_PASSWORD = 'root'
         MYSQL_SERVICE_NAME = 'mysql-service'
         MYSQL_DATABASE = 'studentdb'
+        SONARQUBE_SERVER = 'SonarQube'
     }
 
     stages {
@@ -26,6 +27,15 @@ pipeline {
             }
         }
 
+        stage('SonarQube Code Analysis') {
+            steps {
+                echo "🔍 Analyse du code avec SonarQube..."
+                withSonarQubeEnv("${SONARQUBE_SERVER}") {
+                    sh "mvn clean verify sonar:sonar -Dsonar.projectKey=${APP_NAME}"
+                }
+            }
+        }
+
         stage('Deploy MySQL in Kubernetes') {
             steps {
                 echo "🐳 Déploiement de MySQL dans Kubernetes..."
@@ -34,28 +44,28 @@ pipeline {
                     kubectl apply -f k8s/mysql-deployment.yaml -n ${K8S_NAMESPACE} --validate=false
                     echo "⏳ Attente que MySQL soit prêt..."
                     kubectl wait --for=condition=ready pod -l app=mysql -n ${K8S_NAMESPACE} --timeout=180s
+                    echo "✅ MySQL pod prêt."
                 """
             }
         }
 
-        stage('Check MySQL') {
+        stage('Check MySQL Availability') {
             steps {
-                echo "🔍 Vérification que MySQL est accessible..."
+                echo "🔍 Vérification de la connectivité MySQL..."
                 sh """
                     export KUBECONFIG=${KUBECONFIG}
                     MYSQL_POD=\$(kubectl get pod -l app=mysql -n ${K8S_NAMESPACE} -o jsonpath='{.items[0].metadata.name}')
-                    kubectl exec -n ${K8S_NAMESPACE} \$MYSQL_POD -- mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SHOW DATABASES;'
+                    kubectl exec -n ${K8S_NAMESPACE} \$MYSQL_POD -- mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e 'SELECT 1;'
+                    echo "✅ Connexion MySQL OK."
                 """
             }
         }
 
         stage('Build & Test Maven') {
             steps {
-                echo "🧹 Compilation et tests Maven..."
+                echo "🧹 Compilation et tests Maven avec MySQL..."
                 sh """
-                    export KUBECONFIG=${KUBECONFIG}
-                    mvn clean test -Dspring.profiles.active=test \
-                        -Dspring.datasource.url=jdbc:mysql://${MYSQL_SERVICE_NAME}:3306/${MYSQL_DATABASE} \
+                    mvn clean test -Dspring.datasource.url=jdbc:mysql://${MYSQL_SERVICE_NAME}:3306/${MYSQL_DATABASE} \
                         -Dspring.datasource.username=root \
                         -Dspring.datasource.password=${MYSQL_ROOT_PASSWORD}
                 """
@@ -97,7 +107,7 @@ pipeline {
                 sh """
                     export KUBECONFIG=${KUBECONFIG}
                     APP_POD=\$(kubectl get pod -l app=${APP_NAME} -n ${K8S_NAMESPACE} -o jsonpath='{.items[0].metadata.name}')
-                    kubectl logs -n ${K8S_NAMESPACE} \$APP_POD
+                    kubectl logs -n ${K8S_NAMESPACE} \$APP_POD --tail=50
                 """
             }
         }
@@ -111,7 +121,7 @@ pipeline {
             echo "❌ Le pipeline a échoué !"
         }
         success {
-            echo "✅ Déploiement et tests réussis avec Kubernetes !"
+            echo "✅ Déploiement complet réussi (SonarQube + DockerHub + Kubernetes) !"
         }
     }
 }
